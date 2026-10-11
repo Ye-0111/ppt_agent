@@ -1,0 +1,40 @@
+"""智能体执行日志 VO（参考 backend schemas/statistics.py）。"""
+
+from typing import Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class AgentLogVO(BaseModel):
+    """智能体执行日志视图对象（单条 specialist 执行）。"""
+
+    id: int
+    task_id: str = Field(..., alias="taskId")
+    agent_name: str = Field(..., alias="agentName")
+    start_time: str = Field(..., alias="startTime")
+    end_time: Optional[str] = Field(None, alias="endTime")
+    duration_ms: Optional[int] = Field(None, alias="durationMs")
+    status: str
+    error_message: Optional[str] = Field(None, alias="errorMessage")
+    prompt: Optional[str] = None
+    input_data: Optional[str] = Field(None, alias="inputData")
+    output_data: Optional[str] = Field(None, alias="outputData")
+    create_time: str = Field(..., alias="createTime")
+    update_time: str = Field(..., alias="updateTime")
+
+    class Config:
+        populate_by_name = True
+
+
+class AgentExecutionStatsVO(BaseModel):
+    """任务执行统计（按 taskId 聚合所有 specialist 执行）。"""
+
+    task_id: str = Field(..., alias="taskId")
+    total_duration_ms: int = Field(..., alias="totalDurationMs")
+    agent_count: int = Field(..., alias="agentCount")
+    agent_durations: Dict[str, int] = Field(default_factory=dict, alias="agentDurations")
+    overall_status: str = Field(..., alias="overallStatus")
+    logs: List[AgentLogVO] = Field(default_factory=list)
+
+    class Config:
+        populate_by_name = True

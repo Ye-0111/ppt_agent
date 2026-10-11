@@ -1,0 +1,3 @@
+export const REQUEST_TIMEOUT = 60000
+export const UNAUTHORIZED_CODE = 40100
+export const MIN_PASSWORD_LENGTH = 8

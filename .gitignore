@@ -1,0 +1,62 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+build/
+dist/
+wheels/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Frontend dependencies and generated files
+node_modules/
+.vite/
+*.tsbuildinfo
+
+# Local environment variables and credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+!.env.template
+
+# Runtime uploads, generated presentations, and local data
+/workspace/
+/ppt-backend/workspace/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Test, lint, and package-manager caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.uv-cache/
+.npm/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+
+# Personal editor settings and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Keep dependency manifests and lockfiles in Git:
+# pyproject.toml, uv.lock, package.json, package-lock.json, .python-version
