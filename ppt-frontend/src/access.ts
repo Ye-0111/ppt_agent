@@ -7,8 +7,9 @@ import { useLoginUserStore } from '@/stores/loginUser'
  * - /admin/* 需要管理员角色
  * - /create 需要登录
  */
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const store = useLoginUserStore()
+  await store.ensureLoginUser()
   const user = store.loginUser
 
   // 管理员页面

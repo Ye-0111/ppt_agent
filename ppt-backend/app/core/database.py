@@ -22,7 +22,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # databases 异步数据库（用于 FastAPI 异步查询）
-database = Database(settings.database_url.replace("+pymysql", ""))
+database = Database(settings.database_url.replace("mysql+pymysql://", "mysql://", 1))
 
 
 async def get_db():

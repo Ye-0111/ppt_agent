@@ -1,18 +1,21 @@
 """配置管理"""
 
 from pathlib import Path
+from typing import Literal
+from urllib.parse import quote
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
-# 获取项目根目录
+# 后端文件工作区保持在 ppt-backend/；安装清单和 .env 位于仓库根目录。
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-ENV_FILE = BASE_DIR / ".env"
+ENV_FILE = BASE_DIR.parent / ".env"
 
 
 class Settings(BaseSettings):
     """应用配置"""
 
     # 服务器配置
-    server_port: int = 8180
+    server_port: int = 8001
     server_host: str = "0.0.0.0"
 
     # 数据库配置
@@ -59,7 +62,7 @@ class Settings(BaseSettings):
     # 多智能体配置（Supervisor 多专家路由）
     use_multi_agent: bool = True              # 是否启用多智能体
     agent_multi_recursion_limit: int = 80     # 多智能体图执行步数上限（防死循环）
-    agent_mode: str = "subagents"              # 编排模式：subagents（默认）| workflow（可切换）
+    agent_mode: Literal["workflow", "subagents"] = "workflow"  # 完整 PPT 接口使用 workflow
 
     # 大纲人工审阅（Human-in-the-loop）配置
     outline_review_enabled: bool = False      # 大纲生成后是否暂停等待人工审阅
@@ -79,13 +82,21 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """获取数据库连接 URL"""
-        return f"mysql+pymysql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
+        return URL.create(
+            "mysql+pymysql",
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
+            database=self.db_name,
+            query={"charset": "utf8mb4"},
+        ).render_as_string(hide_password=False)
 
     @property
     def redis_url(self) -> str:
         """获取 Redis 连接 URL"""
         if self.redis_password:
-            return f"redis://:{self.redis_password}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
+            return f"redis://:{quote(self.redis_password, safe='')}@{self.redis_host}:{self.redis_port}/{self.redis_db}"
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     @property

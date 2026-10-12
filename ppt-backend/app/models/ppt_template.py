@@ -1,6 +1,6 @@
 """PPT 模板 ORM 模型"""
 
-from sqlalchemy import Column, BigInteger, String, DateTime, Text, SmallInteger, Integer
+from sqlalchemy import Column, BigInteger, String, DateTime, Text, SmallInteger, Integer, text
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -17,9 +17,9 @@ class PptTemplate(Base):
     filename = Column(String(256), nullable=False, comment="模板文件名(ppt_templates/下)")
     variables = Column(Text, nullable=True, comment="占位符名 JSON 数组，如 [\"title\",\"author\"]")
     slide_count = Column("slideCount", Integer, nullable=True, comment="页数")
-    is_public = Column("isPublic", SmallInteger, nullable=False, default=0, comment="0私有 1公开")
-    create_time = Column("createTime", DateTime, nullable=False, default=func.now(), comment="创建时间")
+    is_public = Column("isPublic", SmallInteger, nullable=False, default=0, server_default=text("0"), comment="0私有 1公开")
+    create_time = Column("createTime", DateTime, nullable=False, default=func.now(), server_default=func.now(), comment="创建时间")
     update_time = Column(
         "updateTime", DateTime, nullable=False,
-        default=func.now(), onupdate=func.now(), comment="更新时间",
+        default=func.now(), server_default=func.now(), onupdate=func.now(), comment="更新时间",
     )

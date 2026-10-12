@@ -23,6 +23,7 @@ from app.schemas.ppt import (
 from app.services.agent_log_service import AgentLogService
 from app.services.ppt_service import PptService, ROLE_TO_FIELD, ROLE_TO_STAGE
 from app.agent import default_stream_agent
+from app.agents.workflow import MultiAgent
 from app.agents.workflow.outline_normalize import normalize_outline
 
 router = APIRouter(prefix="/ppt", tags=["PPT创作"])
@@ -33,13 +34,27 @@ PPTX_MEDIA_TYPE = (
 )
 
 
+def _get_ppt_agent() -> MultiAgent:
+    """完整 PPT 接口依赖 workflow；在建任务、扣配额前拒绝不兼容的入口。"""
+    if not isinstance(default_stream_agent, MultiAgent):
+        raise BusinessException(
+            ErrorCode.OPERATION_ERROR,
+            "PPT 创建、大纲审阅和续跑需要 USE_MULTI_AGENT=true 且 AGENT_MODE=workflow，"
+            "请修改配置并重启后端。",
+        )
+    return default_stream_agent
+
+
 def _make_on_stage(service: PptService, ppt_id: int, tag: str):
-    """构造 on_stage 回调：specialist 节点产出实时落库（outline/research/filename + stage）。
+    """构造 on_stage 回调：outline/research 产出实时落库，文件由扣配额事务落库。
 
     落库失败仅记日志，不中断流水线（终态以 mark_success/mark_failed 为准）。
     """
 
     async def on_stage(role: str, value: str):
+        # 文件名与 CONTENT_DONE 必须随扣配额一起提交，避免中断后无扣减续跑。
+        if role == "content":
+            return
         field = ROLE_TO_FIELD.get(role)
         stage = ROLE_TO_STAGE.get(role)
         if not (field and stage):
@@ -97,6 +112,7 @@ async def create_ppt(
     generate_ppt 成功后扣配额；流结束标记 SUCCESS/FAILED。中途断流后任务保留中间态，
     可经 /ppt/resume 续跑。
     """
+    agent = _get_ppt_agent()
     service = PptService(db)
 
     # 1. 配额门控（必须在 StreamingResponse 之前）
@@ -113,7 +129,7 @@ async def create_ppt(
 
         async def review_generator():
             try:
-                async for event in default_stream_agent.run_outline_stream(
+                async for event in agent.run_outline_stream(
                     user_message=req.message, session_id=session_id, style=style,
                     on_stage=on_stage,
                     trace_meta=build_trace_metadata(user_id=user.id, ppt_id=ppt_id),
@@ -142,7 +158,7 @@ async def create_ppt(
     # 3. 流式生成
     async def event_generator():
         try:
-            async for event in default_stream_agent.run_ppt_stream(
+            async for event in agent.run_ppt_stream(
                 user_message=req.message,
                 session_id=session_id,
                 on_ppt_created=on_ppt_created,
@@ -228,9 +244,10 @@ async def resume_ppt_task(
     """断点续跑：按 pptId 加载已落库的 outline/research/filename，注入 create_pipeline 续跑剩余阶段。
 
     仅 IN_PROGRESS 任务可续跑；归属越权由 get_task 的 userId 校验拦截。
-    配额仅在续跑需要重新生成文件（content 阶段）时扣减；filename 已在则 route_create_resume
-    跳过 content，generate_ppt 不再执行，不会重复扣。
+    已扣配额的文件直接续跑；旧任务若先落库 filename 却未扣配额，先补扣再续跑。
+    filename 已在则 route_create_resume 跳过 content，generate_ppt 不再执行。
     """
+    agent = _get_ppt_agent()
     service = PptService(db)
     task = await service.get_task(req.ppt_id, user.id)
     if not task:
@@ -244,8 +261,9 @@ async def resume_ppt_task(
     if not resume_patch:
         raise BusinessException(ErrorCode.OPERATION_ERROR, "无可续跑的进度，请重新创建")
 
-    # 仅在续跑需重生文件时才真扣（deduct_for_task）；filename 已在则不会扣
-    await service.check_quota(user.id)
+    # 无文件时先检查额度，生成成功后再由回调原子扣减。
+    if not task.get("filename"):
+        await service.check_quota(user.id)
 
     ppt_id = task["id"]
     topic = (req.message or task["topic"] or "")[:500]
@@ -254,10 +272,13 @@ async def resume_ppt_task(
     state = {"remaining_quota": None, "deducted": False, "filename": task.get("filename")}
     on_stage = _make_on_stage(service, ppt_id, "PPT续跑")
     on_ppt_created = _make_on_ppt_created(service, ppt_id, user.id, state)
+    if task.get("filename"):
+        # 对已扣减阶段幂等；对旧版中断留下的文件补扣，额度不足在 SSE 前拒绝。
+        await on_ppt_created(task["filename"])
 
     async def resume_generator():
         try:
-            async for event in default_stream_agent.run_resume_stream(
+            async for event in agent.run_resume_stream(
                 user_message=topic,
                 session_id=session_id,
                 resume_patch=resume_patch,
@@ -298,6 +319,7 @@ async def resume_ppt(
     跑 create_pipeline（入口条件边 route_create_resume 跳过 outline 节点）
     → research→content→[image‖chart]→beautify。传 pptId 则复用第一段任务，否则新建。
     """
+    agent = _get_ppt_agent()
     service = PptService(db)
     await service.check_quota(user.id)
 
@@ -311,7 +333,15 @@ async def resume_ppt(
     session_id = f"u{user.id}"
 
     # 复用第一段创建的任务（pptId），否则新建（向后兼容）
-    ppt_id = req.ppt_id if req.ppt_id else await service.create_task(user.id, topic, style, session_id)
+    if req.ppt_id:
+        task = await service.get_task(req.ppt_id, user.id)
+        if not task:
+            raise BusinessException(ErrorCode.NOT_FOUND_ERROR, "任务不存在或无权访问")
+        if task["status"] != "IN_PROGRESS":
+            raise BusinessException(ErrorCode.OPERATION_ERROR, f"任务状态为 {task['status']}，不可续跑")
+        ppt_id = req.ppt_id
+    else:
+        ppt_id = await service.create_task(user.id, topic, style, session_id)
     # 把规范化后的大纲落库（覆盖第一段草稿大纲），推进到 OUTLINE_DONE
     try:
         await service.update_progress(ppt_id, outline=edited, stage=ROLE_TO_STAGE["outline"])
@@ -324,7 +354,7 @@ async def resume_ppt(
 
     async def resume_generator():
         try:
-            async for event in default_stream_agent.run_create_stream(
+            async for event in agent.run_create_stream(
                 user_message=req.message,
                 session_id=session_id,
                 outline=edited,

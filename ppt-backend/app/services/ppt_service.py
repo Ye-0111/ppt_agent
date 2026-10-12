@@ -74,8 +74,8 @@ class PptService:
 
             await self.db.execute(
                 query=(
-                    "INSERT INTO sys_ppt (userId, filename, topic, style, status) "
-                    "VALUES (:uid, :filename, :topic, :style, 'SUCCESS')"
+                    "INSERT INTO sys_ppt (userId, filename, topic, style, status, stage, createTime, updateTime) "
+                    "VALUES (:uid, :filename, :topic, :style, 'SUCCESS', 'CREATED', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
                 ),
                 values={
                     "uid": user_id,
@@ -95,8 +95,8 @@ class PptService:
         """创建创作任务（status=IN_PROGRESS, stage=CREATED）。返回新 ppt_id。"""
         return await self.db.execute(
             query=(
-                "INSERT INTO sys_ppt (userId, topic, style, status, stage, sessionId) "
-                "VALUES (:uid, :topic, :style, 'IN_PROGRESS', 'CREATED', :sid)"
+                "INSERT INTO sys_ppt (userId, topic, style, status, stage, sessionId, createTime, updateTime) "
+                "VALUES (:uid, :topic, :style, 'IN_PROGRESS', 'CREATED', :sid, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
             ),
             values={"uid": user_id, "topic": topic, "style": style, "sid": session_id},
         )
@@ -111,7 +111,7 @@ class PptService:
             return
         set_clause = ", ".join(f"{k} = :{k}" for k in updates)
         await self.db.execute(
-            query=f"UPDATE sys_ppt SET {set_clause} WHERE id = :pid",
+            query=f"UPDATE sys_ppt SET {set_clause}, updateTime = CURRENT_TIMESTAMP WHERE id = :pid",
             values={**updates, "pid": ppt_id},
         )
 
@@ -129,7 +129,7 @@ class PptService:
             # 1) 乐观锁抢占 stage 转换；rowcount==0 表示已被并发扣过
             rc = await self.db.execute(
                 query=(
-                    "UPDATE sys_ppt SET filename = :filename, stage = 'CONTENT_DONE' "
+                    "UPDATE sys_ppt SET filename = :filename, stage = 'CONTENT_DONE', updateTime = CURRENT_TIMESTAMP "
                     "WHERE id = :pid AND status = 'IN_PROGRESS' "
                     "AND stage NOT IN ('CONTENT_DONE', 'BEAUTIFY_DONE')"
                 ),
@@ -143,14 +143,15 @@ class PptService:
                 values={"id": user_id},
             )
             if not rowcount:
-                return False, 0
+                # 抛出异常让事务同时回滚任务状态，不能留下未扣配额的 CONTENT_DONE。
+                throw_if(True, ErrorCode.QUOTA_NOT_ENOUGH, "PPT 配额已用尽")
             return True, await self.get_quota(user_id)
 
     async def mark_success(self, ppt_id: int) -> None:
         """流正常结束且已生成文件 → 标记成功。"""
         await self.db.execute(
             query=(
-                "UPDATE sys_ppt SET status = 'SUCCESS', stage = 'BEAUTIFY_DONE' "
+                "UPDATE sys_ppt SET status = 'SUCCESS', stage = 'BEAUTIFY_DONE', updateTime = CURRENT_TIMESTAMP "
                 "WHERE id = :pid"
             ),
             values={"pid": ppt_id},
@@ -160,7 +161,7 @@ class PptService:
         """流异常结束 → 标记失败并记录原因。"""
         await self.db.execute(
             query=(
-                "UPDATE sys_ppt SET status = 'FAILED', errorMessage = :err "
+                "UPDATE sys_ppt SET status = 'FAILED', errorMessage = :err, updateTime = CURRENT_TIMESTAMP "
                 "WHERE id = :pid"
             ),
             values={"pid": ppt_id, "err": (error or "")[:500]},

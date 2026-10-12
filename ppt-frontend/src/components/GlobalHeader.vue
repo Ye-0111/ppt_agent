@@ -59,6 +59,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
+import { userLogout } from '@/api/userController'
 import {
   LogoutOutlined,
   HomeOutlined,
@@ -95,9 +96,18 @@ const menuItems = computed(() => {
 })
 
 const doLogout = async () => {
-  loginUserStore.clearLoginUser()
-  message.success('退出登录成功')
-  await router.push('/user/login')
+  try {
+    const response = await userLogout()
+    if (response.data.code !== 0) {
+      message.error(response.data.message || '退出登录失败')
+      return
+    }
+    loginUserStore.clearLoginUser()
+    message.success('退出登录成功')
+    await router.push('/user/login')
+  } catch {
+    message.error('退出登录失败，请重试')
+  }
 }
 </script>
 

@@ -3,13 +3,14 @@
 import logging
 
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 # DashScope 兼容 OpenAI 的 API 地址
-DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+DASHSCOPE_BASE_URL = "https://api.camel-hub.com/v1"
 
 
 def build_llm(temperature: float = 0.6) -> ChatOpenAI:
@@ -19,7 +20,7 @@ def build_llm(temperature: float = 0.6) -> ChatOpenAI:
     拿到 on_chat_model_stream 的 token 流，否则 TEXT_DELTA 无内容。
     """
     return ChatOpenAI(
-        api_key=settings.dashscope_api_key,
+        api_key=SecretStr(settings.dashscope_api_key),
         base_url=DASHSCOPE_BASE_URL,
         model=settings.dashscope_model,
         temperature=temperature,
@@ -30,7 +31,7 @@ def build_llm(temperature: float = 0.6) -> ChatOpenAI:
 def build_summary_llm() -> ChatOpenAI:
     """创建摘要 LLM（低温度，供 SummaryBufferMemory 使用）。"""
     return ChatOpenAI(
-        api_key=settings.dashscope_api_key,
+        api_key=SecretStr(settings.dashscope_api_key),
         base_url=DASHSCOPE_BASE_URL,
         model=settings.dashscope_model,
         temperature=0.2,

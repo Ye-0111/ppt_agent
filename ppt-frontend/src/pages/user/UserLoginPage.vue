@@ -32,13 +32,13 @@
           <p class="form-subtitle">登录您的账号继续创作</p>
 
           <a-form :model="formState" name="basic" autocomplete="off" @finish="handleSubmit" class="login-form">
-            <a-form-item name="username" :rules="[{ required: true, message: '请输入用户名' }]">
-              <a-input v-model:value="formState.username" placeholder="请输入用户名" size="large" class="form-input">
+            <a-form-item name="username" :rules="[{ required: true, message: '请输入用户名' }, { min: 4, max: 32, message: '用户名需为 4–32 个字符' }]">
+              <a-input v-model:value="formState.username" placeholder="请输入用户名（4–32 个字符）" size="large" class="form-input">
                 <template #prefix><UserOutlined class="input-icon" /></template>
               </a-input>
             </a-form-item>
-            <a-form-item name="password" :rules="[{ required: true, message: '请输入密码' }, { min: 8, message: '密码长度不能小于 8 位' }]">
-              <a-input-password v-model:value="formState.password" placeholder="请输入密码" size="large" class="form-input">
+            <a-form-item name="password" :rules="[{ required: true, message: '请输入密码' }, { min: 8, max: 64, message: '密码需为 8–64 个字符' }]">
+              <a-input-password v-model:value="formState.password" placeholder="请输入密码（8–64 个字符）" size="large" class="form-input">
                 <template #prefix><LockOutlined class="input-icon" /></template>
               </a-input-password>
             </a-form-item>
@@ -59,6 +59,7 @@
 
 <script lang="ts" setup>
 import { reactive } from 'vue'
+import { isAxiosError } from 'axios'
 import { userLogin } from '@/api/userController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import { useRouter } from 'vue-router'
@@ -69,14 +70,20 @@ const formState = reactive({ username: '', password: '' })
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
 
-const handleSubmit = async (values: any) => {
-  const res = await userLogin(values)
-  if (res.data.code === 0 && res.data.data) {
-    loginUserStore.setLoginUser(res.data.data)
-    message.success('登录成功')
-    router.push({ path: '/', replace: true })
-  } else {
-    message.error('登录失败，' + res.data.message)
+const handleSubmit = async (values: typeof formState) => {
+  try {
+    const res = await userLogin(values)
+    if (res.data.code === 0 && res.data.data) {
+      loginUserStore.setLoginUser(res.data.data)
+      message.success('登录成功')
+      router.push({ path: '/', replace: true })
+    } else {
+      message.error('登录失败，' + res.data.message)
+    }
+  } catch (error: unknown) {
+    message.error(isAxiosError(error) && error.response?.status === 422
+      ? '登录信息不符合要求：用户名需为 4–32 个字符，密码需为 8–64 个字符'
+      : '登录请求失败，请检查网络及后端服务')
   }
 }
 </script>

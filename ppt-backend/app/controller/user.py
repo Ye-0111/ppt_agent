@@ -1,11 +1,11 @@
 """用户接口"""
 
 from typing import Optional
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from databases import Database
 
 from app.core.database import get_db
-from app.core.deps import require_admin
+from app.core.deps import get_current_user, require_admin
 from app.schemas.common import BaseResponse
 from app.schemas.user import (
     UserRegisterRequest,
@@ -15,7 +15,7 @@ from app.schemas.user import (
     QuotaPageRequest,
 )
 from app.services.user_service import UserService
-from app.utils.token import set_token, generate_token_id
+from app.utils.token import set_token, remove_token, generate_token_id
 from app.core.config import settings
 
 router = APIRouter(prefix="/user", tags=["用户管理"])
@@ -61,6 +61,26 @@ async def login(
 
 
     return BaseResponse.success(data=user, message="登录成功")
+
+
+@router.get("/get/login", response_model=BaseResponse[LoginUserVO])
+async def get_login_user(
+    user: LoginUserVO = Depends(get_current_user),
+    db: Database = Depends(get_db),
+):
+    """通过现有 Cookie 恢复登录状态，并读取实时配额。"""
+    user.ppt_quota = await UserService(db).get_quota(user.id)
+    return BaseResponse.success(data=user)
+
+
+@router.post("/logout", response_model=BaseResponse[bool])
+async def logout(request: Request, response: Response):
+    """同时撤销服务器会话和浏览器 Cookie。"""
+    token_id = request.cookies.get("TOKEN")
+    if token_id:
+        await remove_token(token_id)
+    response.delete_cookie("TOKEN")
+    return BaseResponse.success(data=True)
 
 
 @router.post("/quota", response_model=BaseResponse)

@@ -52,8 +52,8 @@ class UserService:
 
         # 插入用户（含默认配额）
         query = """
-            INSERT INTO sys_user (username, password, nickname, userRole, ppt_quota)
-            VALUES (:username, :password, :nickname, :userRole, :ppt_quota)
+            INSERT INTO sys_user (username, password, nickname, userRole, ppt_quota, status, createTime)
+            VALUES (:username, :password, :nickname, :userRole, :ppt_quota, 1, CURRENT_TIMESTAMP)
         """
         user_id = await self.db.execute(
             query=query,

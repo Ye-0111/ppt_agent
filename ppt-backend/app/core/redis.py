@@ -16,10 +16,17 @@ async def init_redis():
         encoding="utf-8",
         decode_responses=True
     )
+    try:
+        await redis_client.ping()
+    except Exception:
+        await close_redis()
+        raise
 
 
 async def close_redis():
     """关闭 Redis 连接"""
     global redis_client
     if redis_client:
-        await redis_client.close()
+        client = redis_client
+        redis_client = None
+        await client.aclose()

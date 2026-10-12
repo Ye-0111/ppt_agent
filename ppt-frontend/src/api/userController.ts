@@ -5,6 +5,16 @@ export async function userLogin(body: { username: string; password: string }) {
   return request.post('/user/login', body)
 }
 
+/** 恢复当前登录用户 */
+export async function getLoginUser() {
+  return request.get('/user/get/login')
+}
+
+/** 撤销登录会话 */
+export async function userLogout() {
+  return request.post('/user/logout')
+}
+
 /** 用户注册 */
 export async function userRegister(body: { username: string; password: string; checkPassword: string }) {
   return request.post('/user/register', body)

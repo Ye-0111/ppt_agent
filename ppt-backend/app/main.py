@@ -25,24 +25,26 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时执行
     # LangSmith tracing 必须在任何 LLM/agent 调用前初始化（langsmith 的 get_env_var 被 lru_cache）
-    setup_langsmith()
-    await database.connect()
-    await init_redis()
-    print(f"数据库连接成功: {settings.database_url}")
-    print(f"Redis 连接成功: {settings.redis_url}")
-
-    yield
-
-    # 关闭时执行
-    await database.disconnect()
-    await close_redis()
-    print("应用已关闭")
+    try:
+        setup_langsmith()
+        await database.connect()
+        await init_redis()
+        logger.info("数据库与 Redis 连接成功")
+        yield
+    finally:
+        try:
+            await close_redis()
+        finally:
+            if database.is_connected:
+                await database.disconnect()
+        logger.info("应用已关闭")
 
 # 创建 FastAPI 应用
 app = FastAPI(

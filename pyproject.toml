@@ -34,4 +34,4 @@ build-backend = "hatchling.build"
 dev = []
 
 [tool.hatch.build.targets.wheel]
-packages = ["app"]
+packages = ["ppt-backend/app"]

@@ -31,8 +31,8 @@ class PptTemplateService:
         return await self.db.execute(
             query=(
                 "INSERT INTO sys_ppt_template "
-                "(userId, name, filename, variables, slideCount, isPublic) "
-                "VALUES (:uid, :name, :filename, :variables, :slideCount, :isPublic)"
+                "(userId, name, filename, variables, slideCount, isPublic, createTime, updateTime) "
+                "VALUES (:uid, :name, :filename, :variables, :slideCount, :isPublic, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
             ),
             values={
                 "uid": user_id,

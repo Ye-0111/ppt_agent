@@ -32,17 +32,17 @@
           <p class="form-subtitle">注册开启您的 AI 创作之旅</p>
 
           <a-form :model="formState" name="basic" autocomplete="off" @finish="handleSubmit" class="register-form">
-            <a-form-item name="username" :rules="[{ required: true, message: '请输入用户名' }]">
-              <a-input v-model:value="formState.username" placeholder="请输入用户名" size="large" class="form-input">
+            <a-form-item name="username" :rules="[{ required: true, message: '请输入用户名' }, { min: 4, max: 32, message: '用户名需为 4–32 个字符' }]">
+              <a-input v-model:value="formState.username" placeholder="请输入用户名（4–32 个字符）" size="large" class="form-input">
                 <template #prefix><UserOutlined class="input-icon" /></template>
               </a-input>
             </a-form-item>
-            <a-form-item name="password" :rules="[{ required: true, message: '请输入密码' }, { min: 8, message: '密码不能小于 8 位' }]">
-              <a-input-password v-model:value="formState.password" placeholder="请输入密码" size="large" class="form-input">
+            <a-form-item name="password" :rules="[{ required: true, message: '请输入密码' }, { min: 8, max: 64, message: '密码需为 8–64 个字符' }]">
+              <a-input-password v-model:value="formState.password" placeholder="请输入密码（8–64 个字符）" size="large" class="form-input">
                 <template #prefix><LockOutlined class="input-icon" /></template>
               </a-input-password>
             </a-form-item>
-            <a-form-item name="checkPassword" :rules="[{ required: true, message: '请确认密码' }, { min: 8, message: '密码不能小于 8 位' }, { validator: validateCheckPassword }]">
+            <a-form-item name="checkPassword" :rules="[{ required: true, message: '请确认密码' }, { min: 8, max: 64, message: '密码需为 8–64 个字符' }, { validator: validateCheckPassword }]">
               <a-input-password v-model:value="formState.checkPassword" placeholder="请确认密码" size="large" class="form-input">
                 <template #prefix><SafetyOutlined class="input-icon" /></template>
               </a-input-password>
@@ -67,6 +67,7 @@ import { useRouter } from 'vue-router'
 import { userRegister } from '@/api/userController'
 import { message } from 'ant-design-vue'
 import { reactive } from 'vue'
+import { isAxiosError } from 'axios'
 import { UserOutlined, LockOutlined, SafetyOutlined, CheckCircleOutlined } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -81,13 +82,19 @@ const validateCheckPassword = (rule: unknown, value: string, callback: (error?: 
   }
 }
 
-const handleSubmit = async (values: any) => {
-  const res = await userRegister(values)
-  if (res.data.code === 0) {
-    message.success('注册成功')
-    router.push({ path: '/user/login', replace: true })
-  } else {
-    message.error('注册失败，' + res.data.message)
+const handleSubmit = async (values: typeof formState) => {
+  try {
+    const res = await userRegister(values)
+    if (res.data.code === 0) {
+      message.success('注册成功')
+      router.push({ path: '/user/login', replace: true })
+    } else {
+      message.error('注册失败，' + res.data.message)
+    }
+  } catch (error: unknown) {
+    message.error(isAxiosError(error) && error.response?.status === 422
+      ? '注册信息不符合要求：用户名需为 4–32 个字符，密码需为 8–64 个字符，请填写确认密码'
+      : '注册请求失败，请检查网络及后端服务')
   }
 }
 </script>
